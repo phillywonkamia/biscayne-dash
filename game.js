@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { Sound } from './audio.js';
+import { Sound } from './audio.js?v=202611190203';   // version tag: a phone can never mix old + new files
 
 const Q = new URLSearchParams(location.search);
 const LANES = [4.65, 0, -4.65];          // screen left → right (camera looks down +Z, so +X is screen-left)
@@ -79,7 +79,7 @@ addEventListener('resize', () => {
 
 // ---------------------------------------------------------------- load the Blender world
 const kit = {};
-const gltf = await new GLTFLoader().loadAsync('assets/world.glb');
+const gltf = await new GLTFLoader().loadAsync('assets/world.glb?v=202611190203');
 for (const o of gltf.scene.children) kit[o.name] = o;
 const allMats = new Set();
 gltf.scene.traverse(o => { if (o.isMesh) allMats.add(o.material); });
@@ -617,3 +617,4 @@ if (Q.has('cam')) camMode = +Q.get('cam');
 if (Q.has('bp')) setBlueprint(blueprint = true);
 if (GOD) console.log('WALLS', walls, 'in', WARM, 's, dist', Math.round(dist), 'close', closeCalls);
 renderer.setAnimationLoop(() => frame(Math.min(clock.getDelta(), 0.05)));
+window.BD_READY = true;

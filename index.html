@@ -135,6 +135,13 @@
 
 <div id="nitrobtn">NITRO</div>
 <div class="made">EVERY MODEL BUILT IN BLENDER FROM CODE · PLAYED IN THREE.JS</div>
-<script type="module" src="game.js"></script>
+<div id="boot" class="overlay hidden"><h1 style="font-size:40px">BISCAYNE<br><span>DASH</span></h1><div class="tag">A NEW VERSION IS OUT</div><button class="gbtn" onclick="location.replace(location.pathname + '?r=' + Date.now())">UPDATE · TAP TO RELOAD</button></div>
+<script>
+  // if the game hasn't come up in 10 s (or crashes while loading), offer a clean reload instead of a frozen screen
+  window.BD_VERSION = '202611190203';
+  window.addEventListener('error', () => { if (!window.BD_READY) document.getElementById('boot').classList.remove('hidden'); });
+  setTimeout(() => { if (!window.BD_READY) document.getElementById('boot').classList.remove('hidden'); }, 10000);
+</script>
+<script type="module" src="game.js?v=202611190203"></script>
 </body>
 </html>
