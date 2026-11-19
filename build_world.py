@@ -54,6 +54,13 @@ CONC   = mat('Concrete',   (0.35, 0.35, 0.4), rough=0.9)
 LAMP   = mat('LampGlow',   (1.0, 0.75, 0.4), emit=10)
 HELI   = mat('HeliBody',   (0.06, 0.06, 0.08), metal=0.6, rough=0.35)
 BEACON = mat('HeliBeacon', (1.0, 0.1, 0.1), emit=12)
+BRICK  = [mat('Brick1', (0.32, 0.12, 0.08), rough=0.9), mat('Brick2', (0.25, 0.14, 0.1), rough=0.9)]
+MURAL  = [mat('Mural%d' % i, c, emit=0.6) for i, c in enumerate([(1, .2, .5), (0, .8, 1), (1, .8, 0), (.5, .2, 1), (1, .4, 0), (0, 1, .4)])]
+HOUSE  = [mat('HouseBlue', (0.2, 0.45, 0.9), emit=0.12), mat('HouseYellow', (1, 0.8, 0.2), emit=0.12),
+          mat('HouseCoral', (1, 0.45, 0.4), emit=0.12), mat('HouseGreen', (0.3, 0.8, 0.5), emit=0.12)]
+ROOF   = mat('Roof', (0.08, 0.06, 0.07), rough=0.8)
+OPEN   = mat('NeonOpen', (1, 0.1, 0.15), emit=10)
+STADIUM = mat('StadiumGlow', (0.9, 0.95, 1.0), emit=8)
 
 # ------------------------------------------------------------ helpers
 def box(name, size, loc, m, parent=None, bevel=0.0):
@@ -92,7 +99,9 @@ def car(name, body, top, x=0, lights=True, siren=False):
             cyl(name + '_Rim', 0.26, 0.34, (x + sx * 0.92, sy * 1.45, 0.42), RIM, (0, math.pi / 2, 0), r)
         if lights:
             box(name + '_Head', (0.4, 0.06, 0.16), (x + sx * 0.62, -2.31, 0.68), HEAD, r)
-            box(name + '_Tail', (0.45, 0.06, 0.14), (x + sx * 0.6, 2.31, 0.68), TAIL, r)
+            box(name + '_Tail', (0.6, 0.08, 0.22), (x + sx * 0.6, 2.32, 0.7), TAIL, r)
+    if lights:
+        box(name + '_Brake', (0.7, 0.06, 0.08), (x, 1.45, 1.3), TAIL, r)   # third brake light
     if siren:
         box(name + '_SirenR', (0.6, 0.25, 0.14), (x - 0.32, 0.3, 1.42), SIREN_R, r)
         box(name + '_SirenB', (0.6, 0.25, 0.14), (x + 0.32, 0.3, 1.42), SIREN_B, r)
@@ -195,6 +204,62 @@ tower('Tower_0', -60, 10, 14, 52); tower('Tower_1', -75, 9, 12, 38)
 deco('Deco_0', -90, 9, 14, 10, PASTEL[0], NEONS[0]); deco('Deco_1', -105, 8, 12, 12, PASTEL[1], NEONS[1])
 deco('Deco_2', -120, 10, 16, 9, PASTEL[2], NEONS[2])
 lamp('Lamp', -130); rail('Rail', -135); heli('Heli')
+
+# ---- the northern run: Overtown → Wynwood → Little Haiti → Liberty City → Miami Gardens
+def brick(name, x, w, d, h, m):   # Overtown brick low-rise with a neon band
+    r = building(name, x, w, d, h, m, NEONS[3]); return r
+
+def metro(name, x):   # Metrorail guideway overhead (one 40 m span)
+    r = root(name, (x, 0, 0))
+    box(name + '_Beam', (3, 40, 1.4), (x, 0, 9.5), CONC, r)
+    for y in (-10, 10):
+        cyl(name + '_Col', 0.7, 9, (x, y, 4.5), CONC, (0, 0, 0), r, verts=10)
+    for k in range(4):
+        box(name + '_Light', (0.1, 1.2, 0.15), (x - 1.55, -15 + k * 10, 9.2), LAMP, r)
+    return r
+
+def warehouse(name, x, w, d, h, seed):   # Wynwood: murals on the road face
+    rnd = random.Random(seed)
+    r = root(name, (x, 0, 0))
+    box(name + '_Wall', (w, d, h), (x, 0, h / 2), WALLS[2], r)
+    for k in range(7):
+        mw, mh = rnd.uniform(2, 5), rnd.uniform(1.5, h - 1)
+        box(name + '_Mural', (0.06, mw, mh), (x + w / 2 + 0.03 + k * 0.004, rnd.uniform(-d / 2 + mw / 2, d / 2 - mw / 2), rnd.uniform(mh / 2 + 0.3, h - mh / 2)), MURAL[rnd.randrange(6)], r)
+    box(name + '_Door', (0.08, 4, 3.5), (x + w / 2 + 0.06, -d / 4, 1.75), CONC, r)
+    return r
+
+def house(name, x, m):   # Little Haiti / Miami Gardens house with a pitched roof + porch light
+    r = root(name, (x, 0, 0))
+    box(name + '_Body', (6, 8, 3.2), (x, 0, 1.6), m, r)
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=5.2, depth=2.2, location=(x, 0, 4.3), rotation=(0, 0, math.pi / 4))
+    rf = bpy.context.object; rf.name = name + '_Roof'; rf.scale = (0.85, 1.15, 1); rf.data.materials.append(ROOF); rf.parent = r
+    box(name + '_Door', (0.06, 1, 2), (x + 3.02, 0.8, 1), ROOF, r)
+    for y in (-2.4, 2.6):
+        box(name + '_Win', (0.05, 1.2, 1), (x + 3.02, y, 1.8), WINDOW, r)
+    box(name + '_Porch', (0.15, 0.3, 0.3), (x + 3.1, 1.6, 2.4), LAMP, r)
+    return r
+
+def store(name, x):   # corner store: awning, lit window, OPEN sign
+    r = root(name, (x, 0, 0))
+    box(name + '_Wall', (8, 10, 4.5), (x, 0, 2.25), WALLS[1], r)
+    box(name + '_Window', (0.05, 6, 2), (x + 4.02, -1, 1.6), WINDOW, r)
+    box(name + '_Awning', (1.4, 10, 0.25), (x + 4.6, 0, 3.4), MURAL[0], r)
+    box(name + '_Open', (0.15, 2.2, 0.7), (x + 4.15, 3, 2.6), OPEN, r)
+    return r
+
+def stadium(name, x):   # Miami Gardens: the stadium glowing in the distance
+    r = root(name, (x, 0, 0))
+    bpy.ops.mesh.primitive_torus_add(major_radius=38, minor_radius=7, major_segments=48, minor_segments=8, location=(x, 0, 8))
+    t = bpy.context.object; t.name = name + '_Bowl'; t.scale = (1, 1.3, 1); t.data.materials.append(WALLS[0]); t.parent = r
+    bpy.ops.mesh.primitive_torus_add(major_radius=40, minor_radius=0.8, major_segments=48, minor_segments=6, location=(x, 0, 15.5))
+    t = bpy.context.object; t.name = name + '_Lights'; t.scale = (1, 1.3, 1); t.data.materials.append(STADIUM); t.parent = r
+    return r
+
+brick('Brick_0', -150, 9, 14, 14, BRICK[0]); brick('Brick_1', -165, 8, 12, 9, BRICK[1])
+metro('Metro', -180)
+warehouse('Warehouse_0', -195, 12, 18, 7, 1); warehouse('Warehouse_1', -215, 10, 16, 8, 2)
+house('House_0', -230, HOUSE[0]); house('House_1', -240, HOUSE[1]); house('House_2', -250, HOUSE[2]); house('House_3', -260, HOUSE[3])
+store('Store_0', -275); stadium('Stadium', -400)
 
 # one road tile (40 m), the game repeats it forever
 t = root('RoadTile', (0, 20, 0))

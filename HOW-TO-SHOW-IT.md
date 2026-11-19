@@ -8,7 +8,7 @@ Local: double-click `PLAY.command`
 - Green rings = coins → nitro + garage money.
 - CLOSE CALLS: be in a car's lane, swerve out at the last second → points + nitro, chain them for x2…x5.
   Two cars passing on both sides at once = THREADED THE NEEDLE.
-- The route: Biscayne → Brickell → MacArthur Causeway → Ocean Drive, one mile each, then it loops.
+- The route (one mile each, heading north): Biscayne → Brickell → Ocean Drive → MacArthur Causeway → Overtown → Wynwood → Little Haiti → Liberty City → Miami Gardens (runs forever).
 - After ~3/4 mile a police chopper shows up. Its spotlight trails you: inside it = double points,
   but the HEAT bar fills. Full heat = rolling roadblock ahead (always one open lane).
 - GARAGE (title screen): spend coins on paint, underglow, rims.

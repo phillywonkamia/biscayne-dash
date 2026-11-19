@@ -17,16 +17,22 @@ const TOUCH = matchMedia('(pointer: coarse)').matches || Q.has('touch');   // ph
 if (TOUCH) document.body.classList.add('touch');
 const baseFov = () => (innerWidth < innerHeight ? 84 : 62);   // portrait phones need a wider lens to see all 3 lanes
 
-// ---------------------------------------------------------------- the Miami route (one district per mile, then it loops)
+// ---------------------------------------------------------------- the Miami route: one district per mile, heading north.
+// Miami Gardens is the last stop and keeps going forever.
 const DLEN = 1609;
 const DISTRICTS = [
   { name: 'BISCAYNE', sub: 'BOULEVARD', bg: 0x0a0318, bld: ['Building_0', 'Building_1', 'Building_2'], palms: 1 },
   { name: 'BRICKELL', sub: 'FINANCIAL DISTRICT', bg: 0x040a1e, bld: ['Tower_0', 'Tower_1', 'Tower_0', 'Building_1'], lamps: true },
-  { name: 'MACARTHUR', sub: 'CAUSEWAY', bg: 0x02121c, bld: [], lamps: true, rails: true },
   { name: 'OCEAN DRIVE', sub: 'SOUTH BEACH', bg: 0x16041e, bld: ['Deco_0', 'Deco_1', 'Deco_2'], palms: 2, double: true },
+  { name: 'MACARTHUR', sub: 'CAUSEWAY', bg: 0x02121c, bld: [], lamps: true, rails: true },
+  { name: 'OVERTOWN', sub: 'HISTORIC', bg: 0x120806, bld: ['Brick_0', 'Brick_1', 'Store_0'], metro: true },
+  { name: 'WYNWOOD', sub: 'ARTS DISTRICT', bg: 0x0e0418, bld: ['Warehouse_0', 'Warehouse_1'], lamps: true },
+  { name: 'LITTLE HAITI', sub: 'TI AYITI', bg: 0x08100a, bld: ['House_0', 'House_1', 'House_2', 'House_3', 'Store_0'], palms: 1, double: true },
+  { name: 'LIBERTY CITY', sub: 'NORTHWEST', bg: 0x0a0812, bld: ['Brick_1', 'Store_0', 'House_1', 'Building_2'], lamps: true },
+  { name: 'MIAMI GARDENS', sub: 'NORTH MIAMI-DADE', bg: 0x06081a, bld: ['House_0', 'House_2', 'House_3', 'Store_0'], palms: 2, double: true, stadium: true },
 ];
-const districtIdx = d => Math.floor(Math.max(0, d) / DLEN);
-const districtAt = d => DISTRICTS[districtIdx(d) % DISTRICTS.length];
+const districtIdx = d => Math.min(Math.floor(Math.max(0, d) / DLEN), DISTRICTS.length - 1);
+const districtAt = d => DISTRICTS[districtIdx(d)];
 
 // ---------------------------------------------------------------- renderer + scene
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -84,7 +90,11 @@ for (const m of allMats) {
   if (m.name === 'TowerStrip') m.emissiveIntensity *= 0.12;
   if (m.name === 'LampGlow') m.emissiveIntensity *= 0.4;
   if (m.name === 'LaneLine') m.emissiveIntensity *= 0.6;
-  if (m.name === 'GECoin') { m.emissiveIntensity *= 0.35; m.transparent = true; m.opacity = 0.8; m.depthWrite = false; }   // see-through rings
+  if (m.name === 'GECoin') { m.emissiveIntensity *= 0.12; m.transparent = true; m.opacity = 0.55; m.depthWrite = false; }   // dim see-through rings: never outshine taillights
+  if (m.name === 'Taillight') m.emissiveIntensity *= 1.7;   // traffic reads first
+  if (m.name === 'Teal' || m.name === 'CopWhite') { m.emissive.copy(m.color); m.emissiveIntensity = 0.12; }   // bodies hold a silhouette at night
+  if (m.name.startsWith('Mural') || m.name === 'NeonOpen') m.emissiveIntensity *= 0.4;
+  if (m.name === 'StadiumGlow') m.emissiveIntensity *= 0.6;
 }
 const siren = { red: matsNamed('SirenRed'), blue: matsNamed('SirenBlue') };
 const beacon = matsNamed('HeliBeacon');
@@ -99,6 +109,7 @@ player.traverse(o => {
     o.material = new THREE.MeshPhysicalMaterial({ color: o.material.color.clone(), name: 'CandyPink', metalness: 0.25, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 });
     paintMats.push(o.material); allMats.add(o.material);
   } else if (o.material.name === 'Rim') { o.material = o.material.clone(); rimMats.push(o.material); allMats.add(o.material); }
+  else if (o.material.name === 'Taillight') { o.material = o.material.clone(); o.material.emissiveIntensity *= 0.35; allMats.add(o.material); }   // your own tails stay soft so they don't glare
 });
 const FACTORY_PAINT = paintMats[0].color.getHex();   // whatever color build_world.py gave the car
 const head = new THREE.SpotLight(0xfff1d0, 35, 50, 0.45, 0.6); head.position.set(0, 1, 2); head.target.position.set(0, 0, 25);
@@ -132,6 +143,8 @@ function dress(tile) {
     if (d.lamps) place(s, 'Lamp', side * 8.4, side * 10, -side);
     if (d.rails) place(s, 'Rail', side * 10.8, 0, side);
   }
+  if (d.metro) place(s, 'Metro', -13.5, 0, 1);                            // Metrorail runs overhead on the right
+  if (d.stadium && Math.random() < 0.18) place(s, 'Stadium', 120, 0, 1);  // the stadium glowing off to the left
 }
 
 // ---------------------------------------------------------------- the chopper
@@ -365,7 +378,7 @@ function addCar(l, z, cop, extra = {}) {
   scene.add(c); traffic.push(c); return c;
 }
 function coinTrail(l, z) {
-  for (let i = 0; i < 5; i++) { const p = kit.Coin.clone(); p.position.set(LANES[l], 0, z + i * 5); scene.add(p); pickups.push(p); }
+  for (let i = 0; i < 5; i++) { const p = kit.Coin.clone(); p.scale.setScalar(0.62); p.position.set(LANES[l], 0.15, z + i * 5); scene.add(p); pickups.push(p); }
 }
 function spawn() {
   if (roadblockQueued) return;   // clear the road for the roadblock
