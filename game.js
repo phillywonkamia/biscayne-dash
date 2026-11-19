@@ -1,6 +1,6 @@
 // BISCAYNE DASH — the game layer. Blender made every model (build_world.py → assets/world.glb);
 // this file loads them and adds the rules: lanes, traffic, cops, coins, nitro, close calls,
-// the Miami route, the garage, the chopper + roadblocks, and the leaderboard. Sound lives in audio.js.
+// the Miami route, the garage, rolling roadblocks, and the leaderboard. Sound lives in audio.js.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -97,7 +97,6 @@ for (const m of allMats) {
   if (m.name === 'StadiumGlow') m.emissiveIntensity *= 0.6;
 }
 const siren = { red: matsNamed('SirenRed'), blue: matsNamed('SirenBlue') };
-const beacon = matsNamed('HeliBeacon');
 const WIDTH = {};
 for (const k of Object.keys(kit)) { const b = new THREE.Box3().setFromObject(kit[k]); WIDTH[k] = b.max.x - b.min.x; }
 
@@ -147,15 +146,6 @@ function dress(tile) {
   if (d.stadium && Math.random() < 0.18) place(s, 'Stadium', 120, 0, 1);  // the stadium glowing off to the left
 }
 
-// ---------------------------------------------------------------- the chopper
-const heli = kit.Heli.clone(); heli.scale.setScalar(1.4); heli.visible = false; scene.add(heli);
-const rotor = heli.getObjectByName('Heli_Rotor');
-const beam = new THREE.SpotLight(0xe8f0ff, 0, 80, 0.16, 0.45, 1); scene.add(beam, beam.target);
-const coneGeo = new THREE.ConeGeometry(2.8, 1, 24, 1, true); coneGeo.translate(0, -0.5, 0);
-const cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-const pool = new THREE.Mesh(new THREE.CircleGeometry(2.8, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-pool.rotation.x = -Math.PI / 2; pool.position.y = 0.06; scene.add(cone, pool);
-const HELI_AT = 1200;   // meters before the chopper shows up
 
 // ---------------------------------------------------------------- garage
 const PAINTS = [
@@ -337,7 +327,7 @@ $('name').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 
 // ---------------------------------------------------------------- game state
 let state = 'title', speed = 0, dist = 0, score = 0, coins = 0, nitro = 0, lane = 1, laneX = 0, t = 0;
 let best = (Board.load()[0] || {}).score || 0, shake = 0, camMode = 0, blueprint = false, spawnIn = 0;
-let curDistrict = 0, heat = 0, roadblockQueued = false, heliOn = false, spotX = 0, inLight = false;
+let curDistrict = 0, roadblockQueued = false, nextRB = 0;
 let combo = 0, lastCloseT = -9, lastCloseSide = 0, closeCalls = 0, lastLaneT = -9;
 const traffic = [], pickups = [];
 const keys = {};
@@ -356,12 +346,11 @@ function reset() {
   for (const o of [...traffic, ...pickups]) scene.remove(o);
   traffic.length = pickups.length = 0;
   speed = 28; dist = START_DIST; score = coins = 0; nitro = 0.3; lane = 1; laneX = 0; spawnIn = 1;
-  heat = 0; roadblockQueued = false; heliOn = false; heli.visible = false; combo = 0; closeCalls = 0;
+  roadblockQueued = false; nextRB = START_DIST + 1800; combo = 0; closeCalls = 0;
   curDistrict = districtIdx(dist);
   for (const tl of tiles) { tl.userData.dname = null; dress(tl); }
   player.position.set(0, 0, 0); player.rotation.set(0, 0, 0);
   for (const id of ['hud', 'nitro', 'nlabel']) $(id).classList.remove('hidden');
-  $('heatwrap').classList.add('hidden');
   $('title').classList.add('hidden'); $('over').classList.add('hidden'); $('nitrobtn').classList.add('on');
   state = 'play';
   banner(districtAt(dist).name, districtAt(dist).sub);
@@ -504,7 +493,7 @@ function frame(dt, draw = true) {
     if (boosting) nitro = Math.max(0, nitro - dt * 0.35);
     speed = Math.min(speed + dt * 0.9, 75);
     v = speed * (boosting ? 1.6 : 1);
-    dist += v * dt; score += v * dt * (boosting ? 2 : 1) * (inLight ? 2 : 1) * 0.5;
+    dist += v * dt; score += v * dt * (boosting ? 2 : 1) * 0.5;
     spawnIn -= dt * v / 30;
     if (spawnIn <= 0) { spawn(); spawnIn = Math.max(1.4 - dist / 9000, 0.75); }
     if (roadblockQueued) tryRoadblock();
@@ -562,18 +551,10 @@ function frame(dt, draw = true) {
       } else if (p.position.z < -20) { scene.remove(p); pickups.splice(i, 1); }
     }
 
-    // the chopper: the spotlight trails you; under it = double points but the heat climbs; full heat = roadblock
-    if (!heliOn && (dist > HELI_AT || Q.has('heat'))) {
-      heliOn = true; heli.visible = true; heli.position.set(0, 40, 160); spotX = laneX;
-      $('heatwrap').classList.remove('hidden'); pop('CHOPPER INBOUND', 'warn'); Sound.alarm();
-    }
-    if (heliOn) {
-      spotX += (laneX - spotX) * Math.min(1, dt * 1.1);
-      inLight = Math.abs(spotX - laneX) < 2.4;
-      heat = Math.max(0, Math.min(1, heat + (inLight ? dt * 0.2 : -dt * 0.06)));
-      if (heat >= 1 && !roadblockQueued) { heat = 0; roadblockQueued = true; pop('ROADBLOCK AHEAD', 'warn'); Sound.alarm(); }
-      $('heatbar').style.width = (heat * 100) + '%';
-      $('spot').classList.toggle('on', inLight);
+    // a rolling roadblock every mile or so (always one open lane, coins in the gap)
+    if (dist > nextRB && !roadblockQueued) {
+      roadblockQueued = true; nextRB = dist + 1100 + Math.random() * 700;
+      pop('ROADBLOCK AHEAD', 'warn'); Sound.alarm();
     }
     if (t - lastCloseT > 3 && combo) { combo = 0; }
     $('score').textContent = Math.floor(score).toLocaleString();
@@ -584,7 +565,6 @@ function frame(dt, draw = true) {
   } else {
     player.rotation.y += dt * 6 * shake; shake = Math.max(0, shake - dt);
   }
-  if (state !== 'play') inLight = false;
 
   // scroll the world; tiles re-dress for whatever district they wrap into
   for (const tl of tiles) {
@@ -598,25 +578,11 @@ function frame(dt, draw = true) {
   skyCol.lerp(skyTarget.setHex(target), Math.min(1, dt * 0.8));
   scene.background.copy(skyCol); scene.fog.color.copy(skyCol);
 
-  // sirens + beacon flash
+  // sirens pulse
   const ph = (Math.sin(t * 6) + 1) / 2;   // soft red/blue pulse, not a strobe
   for (const m of siren.red) m.emissiveIntensity = 1 + 3.2 * ph;
   for (const m of siren.blue) m.emissiveIntensity = 1 + 3.2 * (1 - ph);
-  for (const m of beacon) m.emissiveIntensity = 0.5 + 2.5 * Math.max(0, Math.sin(t * 3));
 
-  // chopper flight + beam
-  if (heliOn && state !== 'title') {
-    heli.position.lerp(tmp.set(spotX * 0.6, 17, 26), Math.min(1, dt * 0.8));
-    heli.rotation.set(0.12, Math.PI + Math.sin(t * 0.5) * 0.15, Math.sin(t * 0.7) * 0.06);
-    rotor.rotation.y += dt * 28;
-    const aim = tmp.set(spotX, 0, 3);
-    beam.position.copy(heli.position); beam.target.position.copy(aim); beam.intensity = 22;
-    const dir = aim.clone().sub(heli.position), len = dir.length();
-    cone.position.copy(heli.position); cone.scale.set(1, len, 1); cone.quaternion.setFromUnitVectors(down, dir.normalize());
-    cone.material.opacity = 0.035; pool.position.set(spotX, 0.06, 3); pool.material.opacity = inLight ? 0.16 : 0.1;
-  } else if (state === 'title' || state === 'garage') {
-    heli.visible = false; beam.intensity = 0; cone.material.opacity = 0; pool.material.opacity = 0;
-  }
 
   // camera
   glow.position.set(laneX, 0.25, 0);
@@ -630,7 +596,7 @@ function frame(dt, draw = true) {
   if (state === 'garage') look.set(0, -1.4, 0); else look.set(laneX * 0.85, 1.4, 14);
   camera.lookAt(look);
 
-  Sound.update(Math.min(1, Math.max(0, (v - 28) / 92)), boosting, sirenLvl, heliOn && state === 'play' ? 1 : 0, state === 'play');
+  Sound.update(Math.min(1, Math.max(0, (v - 28) / 92)), boosting, sirenLvl, 0, state === 'play');
   if (draw) composer.render();
 }
 
