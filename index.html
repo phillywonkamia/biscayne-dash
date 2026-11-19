@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BISCAYNE DASH</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="importmap">
+{ "imports": {
+  "three": "./lib/three/build/three.module.js",
+  "three/addons/": "./lib/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; margin: 0; height: 100%; background: #07020f; overflow: hidden; font-family: 'Arial Black', Impact, sans-serif; color: #fff; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 18px; left: 24px; right: 24px; display: flex; justify-content: space-between; pointer-events: none; text-shadow: 0 0 12px #ff1a8c; }
+  #score { font-size: 34px; } #best { font-size: 16px; opacity: .7; text-align: right; }
+  #nitro { position: fixed; bottom: 26px; left: 24px; width: 220px; height: 14px; border: 2px solid #00e5ff; box-shadow: 0 0 12px #00e5ff; }
+  #nitrobar { height: 100%; width: 0; background: #00e5ff; }
+  #nlabel { position: fixed; bottom: 46px; left: 24px; font-size: 13px; color: #00e5ff; letter-spacing: 3px; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(20,0,40,.55), rgba(5,0,12,.9)); text-align: center; }
+  .hidden { display: none !important; }
+  h1 { margin: 0; font-size: 92px; line-height: .9; letter-spacing: 4px; color: #ff1a8c; text-shadow: 0 0 18px #ff1a8c, 0 0 60px #ff1a8c; font-style: italic; }
+  h1 span { color: #00e5ff; text-shadow: 0 0 18px #00e5ff, 0 0 60px #00e5ff; }
+  .tag { margin: 14px 0 34px; letter-spacing: 8px; font-size: 14px; opacity: .8; }
+  .press { font-size: 22px; animation: blink 1s steps(2) infinite; color: #ffd400; text-shadow: 0 0 12px #ffd400; }
+  .how { margin-top: 30px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.8; opacity: .8; }
+  .how b { color: #00e5ff; }
+  .made { position: fixed; bottom: 16px; right: 22px; font-family: Arial, sans-serif; font-size: 12px; opacity: .55; letter-spacing: 2px; }
+  #busted { font-size: 110px; color: #ff2020; text-shadow: 0 0 20px #ff2020, 0 0 70px #0040ff; font-style: italic; }
+  #final { font-size: 28px; margin: 10px 0 30px; }
+  #nitrobtn { display: none; position: fixed; right: 22px; bottom: 30px; width: 96px; height: 96px; border-radius: 50%; border: 3px solid #00e5ff; color: #00e5ff; font-size: 15px; letter-spacing: 2px; align-items: center; justify-content: center; box-shadow: 0 0 18px #00e5ff, inset 0 0 18px rgba(0,229,255,.35); background: rgba(0,30,40,.35); }
+  .touch #nitrobtn.on { display: flex; }
+  .touch .desk, .tap { display: none; } .touch .tap { display: block; } .touch span.tap { display: inline; }
+  .touch .made { display: none; }
+  @media (max-width: 700px) { h1 { font-size: 58px; } .tag { font-size: 10px; letter-spacing: 3px; } #busted { font-size: 64px; } #final { font-size: 18px; } .how { font-size: 13px; padding: 0 20px; } #score { font-size: 26px; } }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="hud" class="hidden"><div id="score">0</div><div id="best"></div></div>
+<div id="nlabel" class="hidden">NITRO</div>
+<div id="nitro" class="hidden"><div id="nitrobar"></div></div>
+
+<div id="title" class="overlay">
+  <h1>BISCAYNE<br><span>DASH</span></h1>
+  <div class="tag">MIAMI · 3 A.M. · DON'T GET CAUGHT</div>
+  <div class="press"><span class="desk">PRESS SPACE</span><span class="tap">TAP TO START</span></div>
+  <div class="how tap">Tap <b>left</b> / <b>right</b> side to switch lanes<br>Hold <b>NITRO</b> to boost · grab green coins to refill it</div>
+  <div class="how desk">
+    <b>← →</b> or <b>A D</b> switch lanes &nbsp;·&nbsp; hold <b>SPACE</b> = nitro (fill it with green coins)<br>
+    <b>B</b> = blueprint mode (see the raw Blender models) &nbsp;·&nbsp; <b>C</b> = camera
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div id="busted">BUSTED</div>
+  <div id="final"></div>
+  <div class="press"><span class="desk">SPACE TO RUN IT BACK</span><span class="tap">TAP TO RUN IT BACK</span></div>
+</div>
+
+<div id="nitrobtn">NITRO</div>
+<div class="made">EVERY MODEL BUILT IN BLENDER FROM CODE · PLAYED IN THREE.JS</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
