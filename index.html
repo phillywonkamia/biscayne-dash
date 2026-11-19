@@ -35,6 +35,21 @@
   .touch .desk, .tap { display: none; } .touch .tap { display: block; } .touch span.tap { display: inline; }
   .touch .made { display: none; }
   @media (max-width: 700px) { h1 { font-size: 58px; } .tag { font-size: 10px; letter-spacing: 3px; } #busted { font-size: 64px; } #final { font-size: 18px; } .how { font-size: 13px; padding: 0 20px; } #score { font-size: 26px; } }
+  .board { margin-top: 22px; min-width: 300px; font-family: 'Arial Black', Impact, sans-serif; }
+  .bhead { color: #ffd400; letter-spacing: 6px; font-size: 13px; margin-bottom: 8px; text-shadow: 0 0 10px #ffd400; }
+  .brow { display: flex; gap: 14px; padding: 4px 14px; font-size: 16px; }
+  .brow:nth-child(odd) { background: rgba(255,255,255,.04); }
+  .brow.me { color: #00e5ff; text-shadow: 0 0 10px #00e5ff; background: rgba(0,229,255,.1); }
+  .bn { width: 22px; text-align: right; opacity: .6; } .bname { flex: 1; text-align: left; } .bpts { text-align: right; }
+  .bempty { font-family: Arial, sans-serif; opacity: .6; font-size: 14px; }
+  #career { margin-top: 16px; font-family: Arial, sans-serif; font-size: 12px; letter-spacing: 2px; opacity: .65; }
+  #entry { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #rank { color: #ffd400; font-size: 22px; text-shadow: 0 0 14px #ffd400; animation: blink 0.8s steps(2) infinite; }
+  #entry .row { display: flex; gap: 8px; }
+  #name { font: 22px 'Arial Black', Impact, sans-serif; text-transform: uppercase; letter-spacing: 3px; width: 220px; padding: 10px 12px; background: rgba(0,0,0,.5); color: #fff; border: 2px solid #ff1a8c; box-shadow: 0 0 14px #ff1a8c; outline: none; text-align: center; -webkit-user-select: text; user-select: text; }
+  #save { font: 18px 'Arial Black', Impact, sans-serif; padding: 0 18px; background: #ff1a8c; color: #fff; border: 0; box-shadow: 0 0 14px #ff1a8c; }
+  #again.hidden { display: none; }
+  @media (max-width: 700px) { .brow { font-size: 14px; padding: 3px 10px; } .board { min-width: 260px; margin-top: 14px; } #career { font-size: 10px; letter-spacing: 1px; padding: 0 16px; } #name { width: 170px; font-size: 18px; } #rank { font-size: 17px; } }
   @keyframes blink { 50% { opacity: 0; } }
 </style>
 </head>
@@ -52,12 +67,16 @@
     <b>← →</b> or <b>A D</b> switch lanes &nbsp;·&nbsp; hold <b>SPACE</b> = nitro (fill it with green coins)<br>
     <b>B</b> = blueprint mode (see the raw Blender models) &nbsp;·&nbsp; <b>C</b> = camera
   </div>
+  <div id="boardTitle" class="board"></div>
+  <div id="career"></div>
 </div>
 
 <div id="over" class="overlay hidden">
   <div id="busted">BUSTED</div>
   <div id="final"></div>
-  <div class="press"><span class="desk">SPACE TO RUN IT BACK</span><span class="tap">TAP TO RUN IT BACK</span></div>
+  <div id="entry" class="hidden"><div id="rank"></div><div class="row"><input id="name" maxlength="10" placeholder="YOUR NAME" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="save">SAVE</button></div></div>
+  <div class="press" id="again"><span class="desk">SPACE TO RUN IT BACK</span><span class="tap">TAP TO RUN IT BACK</span></div>
+  <div id="boardOver" class="board"></div>
 </div>
 
 <div id="nitrobtn">NITRO</div>

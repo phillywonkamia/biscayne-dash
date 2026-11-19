@@ -98,16 +98,62 @@ for (let i = 0; i < TILES; i++) {
   }
 }
 
+// ---------------------------------------------------------------- leaderboard + career
+// Saved on this device (localStorage). Written behind load/save so an online board can plug in later.
+const Board = {
+  load: () => { try { return JSON.parse(localStorage.getItem('bdash-board')) || []; } catch { return []; } },
+  save: list => localStorage.setItem('bdash-board', JSON.stringify(list.slice(0, 10))),
+  qualifies(pts) { const l = this.load(); return pts > 0 && (l.length < 10 || pts > l[l.length - 1].score); },
+  add(entry) { const l = this.load(); l.push(entry); l.sort((a, b) => b.score - a.score); this.save(l); return l.indexOf(entry); },
+};
+const Career = {
+  load: () => { try { return JSON.parse(localStorage.getItem('bdash-career')) || {}; } catch { return {}; } },
+  record(run) {
+    const c = Object.assign({ runs: 0, coins: 0, miles: 0, bestMiles: 0, bestCoins: 0, cops: 0 }, this.load());
+    c.runs++; c.coins += run.coins; c.miles += run.miles;
+    c.bestMiles = Math.max(c.bestMiles, run.miles); c.bestCoins = Math.max(c.bestCoins, run.coins);
+    if (run.byCop) c.cops++;
+    localStorage.setItem('bdash-career', JSON.stringify(c)); return c;
+  },
+};
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function renderBoard(el, rows, hi = -1) {
+  if (!rows.length) { el.innerHTML = '<div class="bhead">TOP 10</div><div class="bempty">No scores yet. Be the first.</div>'; return; }
+  el.innerHTML = '<div class="bhead">TOP 10</div>' + rows.map((r, i) =>
+    `<div class="brow${i === hi ? ' me' : ''}"><span class="bn">${i + 1}</span><span class="bname">${esc(r.name)}</span><span class="bpts">${r.score.toLocaleString()}</span></div>`).join('');
+}
+function renderCareer() {
+  const c = Career.load();
+  $('career').innerHTML = c.runs ? `CAREER &nbsp;·&nbsp; ${c.runs} RUNS &nbsp;·&nbsp; ${c.coins.toLocaleString()} COINS &nbsp;·&nbsp; ${c.miles.toFixed(1)} MI &nbsp;·&nbsp; LONGEST ${c.bestMiles.toFixed(2)} MI` : '';
+}
+function showTitleBoard() { renderBoard($('boardTitle'), Board.load().slice(0, 5).map(r => r)); $('boardTitle').querySelector('.bhead').textContent = 'TOP 5'; renderCareer(); }
+showTitleBoard();
+
+let pendingRun = null;   // a run waiting for its name
+function saveName() {
+  if (!pendingRun) return;
+  const name = ($('name').value.trim().toUpperCase() || 'DRIVER').slice(0, 10);
+  localStorage.setItem('bdash-name', name);
+  pendingRun.name = name;
+  const at = Board.add(pendingRun); pendingRun = null;
+  $('name').blur(); $('entry').classList.add('hidden'); $('again').classList.remove('hidden');
+  renderBoard($('boardOver'), Board.load(), at);
+}
+$('save').addEventListener('click', saveName);
+$('name').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') saveName(); });
+
 // ---------------------------------------------------------------- game state
 let state = 'title', speed = 0, dist = 0, score = 0, coins = 0, nitro = 0, lane = 1, laneX = 0, t = 0;
-let best = +localStorage.getItem('bdash-best') || 0, shake = 0, camMode = 0, blueprint = false, spawnIn = 0;
+let best = (Board.load()[0] || {}).score || +localStorage.getItem('bdash-best') || 0, shake = 0, camMode = 0, blueprint = false, spawnIn = 0;
 const traffic = [], pickups = [];
 const keys = {};
+const canStart = () => state !== 'play' && !pendingRun && !(state === 'over' && shake > 0.3);
 const AUTO = new URLSearchParams(location.search).has('auto');
 const GOD = new URLSearchParams(location.search).has('god');     // testing: no crashes
 let walls = 0, wallFrames = 0;   // autopilot (attract mode / testing)
 
 function reset() {
+  best = Math.max(best, (Board.load()[0] || {}).score || 0);
   for (const o of [...traffic, ...pickups]) scene.remove(o);
   traffic.length = pickups.length = 0;
   speed = 28; dist = score = coins = 0; nitro = 0.3; lane = 1; laneX = 0; spawnIn = 1;
@@ -151,11 +197,30 @@ function spawn() {
   }
 }
 
+let lastHit = null;
 function crash() {
   state = 'over'; shake = 1; touchBoost = false; $('nitrobtn').classList.remove('on');
   best = Math.max(best, Math.floor(score)); localStorage.setItem('bdash-best', best);
-  $('final').innerHTML = `${Math.floor(score).toLocaleString()} PTS &nbsp;·&nbsp; ${coins} COINS &nbsp;·&nbsp; ${(dist / 1609).toFixed(2)} MI`;
-  setTimeout(() => $('over').classList.remove('hidden'), 700);
+  const pts = Math.floor(score), miles = dist / 1609;
+  $('final').innerHTML = `${pts.toLocaleString()} PTS &nbsp;·&nbsp; ${coins} COINS &nbsp;·&nbsp; ${miles.toFixed(2)} MI`;
+  Career.record({ coins, miles, byCop: !!lastHit?.userData.cop });
+  $('busted').textContent = lastHit?.userData.cop ? 'BUSTED' : 'WRECKED';
+  if (Board.qualifies(pts)) {
+    pendingRun = { score: pts, coins, miles: +miles.toFixed(2), date: new Date().toISOString().slice(0, 10) };
+    const rank = Board.load().filter(r => r.score >= pts).length + 1;
+    $('rank').textContent = rank === 1 ? 'NEW #1 HIGH SCORE' : `NEW HIGH SCORE · #${rank}`;
+    $('name').value = localStorage.getItem('bdash-name') || '';
+    $('entry').classList.remove('hidden'); $('again').classList.add('hidden');
+    renderBoard($('boardOver'), Board.load());
+  } else {
+    $('entry').classList.add('hidden'); $('again').classList.remove('hidden');
+    renderBoard($('boardOver'), Board.load());
+  }
+  setTimeout(() => {
+    $('over').classList.remove('hidden'); if (pendingRun && !TOUCH) $('name').focus();
+    const tn = new URLSearchParams(location.search).get('tname');   // testing: auto-enter a name
+    if (tn && pendingRun) { $('name').value = tn; saveName(); }
+  }, 700);
 }
 
 function setBlueprint(on) {
@@ -168,7 +233,8 @@ function setBlueprint(on) {
 addEventListener('keydown', e => {
   if (e.repeat) { keys[e.code] = true; return; }
   keys[e.code] = true;
-  if (e.code === 'Space') { e.preventDefault(); if (state !== 'play' && !(state === 'over' && shake > 0.3)) reset(); }
+  if (e.target === $('name')) return;
+  if (e.code === 'Space') { e.preventDefault(); if (canStart()) reset(); }
   if (state === 'play') {
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') lane = Math.max(0, lane - 1);
     if (e.code === 'ArrowRight' || e.code === 'KeyD') lane = Math.min(2, lane + 1);
@@ -180,8 +246,8 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 
 // touch: tap left / right half = change lane, hold the NITRO button = boost, tap anywhere = start
 let touchBoost = false;
-const canStart = () => state !== 'play' && !(state === 'over' && shake > 0.3);
 addEventListener('touchstart', e => {
+  if (e.target.closest && e.target.closest('#entry')) return;   // let the name box + SAVE button work
   e.preventDefault();
   if (canStart()) { reset(); return; }
   for (const tch of e.changedTouches) {
@@ -234,7 +300,7 @@ function frame(dt, draw = true) {
         }
       }
       c.position.x += (LANES[u.lane] - c.position.x) * Math.min(1, dt * 3);
-      if (!GOD && Math.abs(c.position.x - laneX) < 2.0 && Math.abs(c.position.z) < 4.6) crash();
+      if (!GOD && state === 'play' && Math.abs(c.position.x - laneX) < 2.0 && Math.abs(c.position.z) < 4.6) { lastHit = c; crash(); }
       if (c.position.z < -30) { scene.remove(c); traffic.splice(i, 1); score += 25; }
     }
     if (GOD) {   // wall detector: all 3 lanes covered inside one 16 m slice ahead
