@@ -176,17 +176,25 @@ const RIMS = [
   { id: 'chrome', name: 'CHROME', hex: 0xe6e6f0, price: 0 }, { id: 'black', name: 'BLACKOUT', hex: 0x151515, price: 200 },
   { id: 'gold', name: 'GOLD', hex: 0xd4a017, price: 300 }, { id: 'red', name: 'CANDY RED', hex: 0xff2030, price: 400 },
 ];
-const SHOP = { paint: PAINTS, glow: GLOWS, rim: RIMS };
+const SIRENS = [
+  { id: 'hilo', name: 'HI-LO', hex: 0x3060ff, price: 0 }, { id: 'yelp', name: 'YELP', hex: 0xff3030, price: 0 },
+  { id: 'wail', name: 'WAIL', hex: 0xffffff, price: 0 }, { id: 'rumbler', name: 'RUMBLER', hex: 0x9b30ff, price: 0 },
+  { id: 'off', name: 'OFF', hex: 0x333333, price: 0 },
+];
+const SHOP = { paint: PAINTS, glow: GLOWS, rim: RIMS, siren: SIRENS };
 const Garage = {
   load() {
     const def = { spent: 0, owned: { paint: ['factory'], glow: ['pink'], rim: ['chrome'] }, equip: { paint: 'factory', glow: 'pink', rim: 'chrome' } };
-    try { return Object.assign(def, JSON.parse(localStorage.getItem('bdash-garage')) || {}); } catch { return def; }
+    let g; try { g = Object.assign(def, JSON.parse(localStorage.getItem('bdash-garage')) || {}); } catch { g = def; }
+    g.owned.siren = SIRENS.map(x => x.id); g.equip.siren = g.equip.siren || 'hilo';   // sirens are free
+    return g;
   },
   save(g) { localStorage.setItem('bdash-garage', JSON.stringify(g)); },
   wallet() { return (Career.load().coins || 0) + (+Q.get('coins') || 0) - this.load().spent; },
 };
-function applyLook() {
+function applyLook(preview = false) {
   const g = Garage.load(), p = PAINTS.find(x => x.id === g.equip.paint) || PAINTS[0];
+  Sound.setSiren(g.equip.siren, preview);
   for (const m of paintMats) { m.color.setHex(p.hex); m.metalness = p.metal ?? 0.25; }
   glow.color.setHex((GLOWS.find(x => x.id === g.equip.glow) || GLOWS[0]).hex);
   for (const m of rimMats) m.color.setHex((RIMS.find(x => x.id === g.equip.rim) || RIMS[0]).hex);
@@ -212,7 +220,7 @@ $('garage').addEventListener('click', e => {
     if (it.price > w) { renderGarage(`NEED ${(it.price - w).toLocaleString()} MORE COINS`); return; }
     g.spent += it.price; g.owned[cat].push(it.id); Sound.buy();
   }
-  g.equip[cat] = it.id; Garage.save(g); applyLook(); renderGarage();
+  g.equip[cat] = it.id; Garage.save(g); applyLook(cat === 'siren'); renderGarage();
 });
 function openGarage() { Sound.start(); state = 'garage'; $('title').classList.add('hidden'); $('garage').classList.remove('hidden'); renderGarage(); }
 function closeGarage() { state = 'title'; $('garage').classList.add('hidden'); $('title').classList.remove('hidden'); showTitleBoard(); }
@@ -591,10 +599,10 @@ function frame(dt, draw = true) {
   scene.background.copy(skyCol); scene.fog.color.copy(skyCol);
 
   // sirens + beacon flash
-  const on = Math.sin(t * 18) > 0;
-  for (const m of siren.red) m.emissiveIntensity = on ? 14 : 0.5;
-  for (const m of siren.blue) m.emissiveIntensity = on ? 0.5 : 14;
-  for (const m of beacon) m.emissiveIntensity = Math.sin(t * 6) > 0.6 ? 14 : 0.3;
+  const ph = (Math.sin(t * 6) + 1) / 2;   // soft red/blue pulse, not a strobe
+  for (const m of siren.red) m.emissiveIntensity = 1 + 3.2 * ph;
+  for (const m of siren.blue) m.emissiveIntensity = 1 + 3.2 * (1 - ph);
+  for (const m of beacon) m.emissiveIntensity = 0.5 + 2.5 * Math.max(0, Math.sin(t * 3));
 
   // chopper flight + beam
   if (heliOn && state !== 'title') {

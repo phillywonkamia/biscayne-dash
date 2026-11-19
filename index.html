@@ -72,7 +72,7 @@
   #heatwrap span { font-size: 13px; color: #ff3030; letter-spacing: 3px; }
   #heat { width: 220px; height: 10px; border: 2px solid #ff3030; box-shadow: 0 0 10px #ff3030; margin-top: 4px; }
   #heatbar { height: 100%; width: 0; background: #ff3030; }
-  #spot { margin-left: 10px; color: #fff; opacity: 0; } #spot.on { opacity: 1; animation: blink .5s steps(2) infinite; }
+  #spot { margin-left: 10px; color: #fff; opacity: 0; } #spot.on { opacity: 1; }
   #final .sub { font-size: 14px; letter-spacing: 3px; opacity: .7; margin-top: 8px; font-family: Arial, sans-serif; }
   .gbtn { margin-top: 22px; font: 16px 'Arial Black', Impact, sans-serif; letter-spacing: 4px; padding: 10px 26px; color: #00e5ff; background: rgba(0,30,40,.4); border: 2px solid #00e5ff; box-shadow: 0 0 12px #00e5ff; cursor: pointer; }
   #garage { justify-content: flex-start; padding-top: 4vh; background: linear-gradient(180deg, rgba(5,0,12,.85) 0%, rgba(5,0,12,.2) 45%, rgba(5,0,12,.2) 60%, rgba(5,0,12,.9) 100%); }
@@ -87,7 +87,7 @@
   .sw b { font-size: 10px; letter-spacing: 1px; } .sw span { font-size: 11px; color: #22ff66; }
   .sw.on { border-color: #00e5ff; box-shadow: 0 0 12px #00e5ff; } .sw.on span { color: #00e5ff; }
   .sw.poor { opacity: .5; } .sw.poor span { color: #ff6060; }
-  @media (max-width: 700px) { #banner { font-size: 34px; top: 14%; } #pop { font-size: 20px; } #pop b { font-size: 26px; } #heatwrap { bottom: 66px; } #heat { width: 160px; } .sw { min-width: 58px; padding: 5px; } .grow > em { width: 100%; text-align: center; } #garage h2 { font-size: 32px; } }
+  @media (max-width: 700px) { #banner { font-size: 34px; top: 14%; } #pop { font-size: 20px; } #pop b { font-size: 26px; } #heatwrap { bottom: 66px; } #heat { width: 160px; } .sw { min-width: 52px; padding: 3px 4px; gap: 1px; } .sw i { width: 16px; height: 16px; } .sw b { font-size: 8px; } .sw span { font-size: 9px; } .gcol { gap: 4px; bottom: 2vh; } .grow > em { font-size: 9px; } .gbtn { margin-top: 8px; padding: 8px 18px; font-size: 13px; } .grow > em { width: 100%; text-align: center; } #garage h2 { font-size: 32px; } }
   @keyframes blink { 50% { opacity: 0; } }
 </style>
 </head>
@@ -129,6 +129,7 @@
     <div class="grow"><em>PAINT</em><span id="g-paint" class="grow"></span></div>
     <div class="grow"><em>GLOW</em><span id="g-glow" class="grow"></span></div>
     <div class="grow"><em>RIMS</em><span id="g-rim" class="grow"></span></div>
+    <div class="grow"><em>SIREN</em><span id="g-siren" class="grow"></span></div>
     <button id="gback" class="gbtn">BACK TO THE STREET</button>
   </div>
 </div>

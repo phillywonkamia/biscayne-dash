@@ -3,7 +3,20 @@
 
 let ctx = null, master, sfx, musicBus, noiseBuf;
 let muted = localStorage.getItem('bdash-mute') === '1';
-let engine, siren, heli, nitro;
+let engine, siren, heli, nitro, sirenParts, sirenType = 'hilo', previewUntil = 0;
+// siren styles: [voice, base Hz, sweep Hz, sweep shape, sweep speed, lowpass Hz, loudness]
+const SIRENS = {
+  hilo:    ['square',   620, 140, 'square',   0.9, 1600, 1.0],   // two-tone hi-lo, like a European cruiser
+  yelp:    ['triangle', 1050, 320, 'sine',    3.4, 3000, 0.9],   // fast American yelp
+  wail:    ['triangle', 900, 300, 'sine',     0.3, 2600, 0.9],   // slow classic wail
+  rumbler: ['sawtooth', 170, 55, 'sine',      1.1, 520, 1.6],    // low "rumbler" growl you feel more than hear
+  off:     ['sine',     440, 0, 'sine',       1, 400, 0],
+};
+function applySiren() {
+  if (!sirenParts) return;
+  const [voice, base, sweep, shape, speed, lp] = SIRENS[sirenType] || SIRENS.hilo, { so, lfo, lg, sf } = sirenParts;
+  so.type = voice; so.frequency.value = base; lfo.type = shape; lfo.frequency.value = speed; lg.gain.value = sweep; sf.frequency.value = lp;
+}
 let playing = false, step = 0, nextT = 0;
 
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -38,11 +51,12 @@ function buildLoops() {
   e1.connect(ef); e2.connect(ef); ef.connect(eg).connect(sfx); e1.start(); e2.start();
   engine = { e1, e2, ef, eg };
 
-  // siren: triangle wail, louder the closer the nearest cop is
-  const so = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), sg = ctx.createGain();
-  so.type = 'triangle'; so.frequency.value = 950; lfo.frequency.value = 0.55; lg.gain.value = 380; sg.gain.value = 0;
-  lfo.connect(lg).connect(so.frequency); so.connect(sg).connect(sfx); so.start(); lfo.start();
-  siren = sg;
+  // siren: an oscillator swept by an LFO through a softening lowpass; the style is picked in the garage
+  const so = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), sf = ctx.createBiquadFilter(), sg = ctx.createGain();
+  sf.type = 'lowpass'; sg.gain.value = 0;
+  lfo.connect(lg).connect(so.frequency); so.connect(sf).connect(sg).connect(sfx); so.start(); lfo.start();
+  siren = sg; sirenParts = { so, lfo, lg, sf };
+  applySiren();
 
   // helicopter: lowpassed noise chopped by an 11 Hz square LFO
   const hn = noiseSrc(true), hf = ctx.createBiquadFilter(), chop = ctx.createGain(), hl = ctx.createOscillator(), hlg = ctx.createGain(), hg = ctx.createGain();
@@ -106,6 +120,10 @@ export const Sound = {
     return muted;
   },
   setPlaying(on) { playing = on; },
+  setSiren(type, preview = false) {
+    sirenType = SIRENS[type] ? type : 'hilo'; applySiren();
+    if (preview && ctx) previewUntil = ctx.currentTime + 1.6;
+  },
   // per-frame: speed01 0..1, boosting bool, siren/heli levels 0..1
   update(speed01, boosting, sirenLvl, heliLvl, driving) {
     if (!ctx) return;
@@ -113,7 +131,9 @@ export const Sound = {
     engine.e1.frequency.setTargetAtTime(f, t, 0.08); engine.e2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
     engine.ef.frequency.setTargetAtTime(250 + speed01 * 1600 + (boosting ? 900 : 0), t, 0.08);
     engine.eg.gain.setTargetAtTime(driving ? 0.07 : 0, t, 0.1);
-    siren.gain.setTargetAtTime(driving ? sirenLvl * 0.05 : 0, t, 0.1);
+    const loud = (SIRENS[sirenType] || SIRENS.hilo)[6];
+    const lvl = t < previewUntil ? 0.6 : driving ? sirenLvl : 0;
+    siren.gain.setTargetAtTime(lvl * 0.032 * loud, t, 0.1);
     heli.gain.setTargetAtTime(driving ? heliLvl * 0.35 : 0, t, 0.2);
     nitro.gain.setTargetAtTime(driving && boosting ? 0.12 : 0, t, 0.05);
   },
