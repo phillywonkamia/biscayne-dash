@@ -103,7 +103,9 @@ let state = 'title', speed = 0, dist = 0, score = 0, coins = 0, nitro = 0, lane 
 let best = +localStorage.getItem('bdash-best') || 0, shake = 0, camMode = 0, blueprint = false, spawnIn = 0;
 const traffic = [], pickups = [];
 const keys = {};
-const AUTO = new URLSearchParams(location.search).has('auto');   // autopilot (attract mode / testing)
+const AUTO = new URLSearchParams(location.search).has('auto');
+const GOD = new URLSearchParams(location.search).has('god');     // testing: no crashes
+let walls = 0, wallFrames = 0;   // autopilot (attract mode / testing)
 
 function reset() {
   for (const o of [...traffic, ...pickups]) scene.remove(o);
@@ -115,19 +117,34 @@ function reset() {
   state = 'play';
 }
 
+// FAIR PLAY RULE: within any stretch of road you cover in ~1 s (32 m minimum), at most 2 of the 3 lanes may hold a car,
+// so there is always a way through. Spawns and cop swerves both check it.
+const ROW_MIN = 32;
+const row = () => Math.max(ROW_MIN, speed * 0.55 + 10);   // ~1 s of reaction time at any speed
+function lanesNear(z, skip) {
+  const s = new Set();
+  for (const c of traffic) if (c !== skip && Math.abs(c.position.z - z) < row()) {
+    s.add(c.userData.lane);
+    s.add(Math.round((LANES[0] - c.position.x) / LANES[0]));   // a cop mid-swerve blocks the lane it's leaving too
+  }
+  return s;
+}
+
 function spawn() {
-  const used = new Set();
-  const n = Math.random() < Math.min(0.15 + dist / 6000, 0.6) ? 2 : 1;   // denser the further you get
+  const used = new Set(lanesNear(SPAWN_Z + 7));
+  const want = Math.random() < Math.min(0.15 + dist / 6000, 0.6) ? 2 : 1;   // denser the further you get
+  const n = Math.min(want, 2 - used.size);   // never fill the third lane
+  const taken = new Set(used);
   for (let k = 0; k < n; k++) {
-    let l; do { l = Math.floor(Math.random() * 3); } while (used.has(l)); used.add(l);
+    let l; do { l = Math.floor(Math.random() * 3); } while (taken.has(l)); taken.add(l);
     const cop = Math.random() < 0.25 + Math.min(dist / 8000, 0.25);
     const c = (cop ? kit.Traffic_Cop : kit.Traffic_Teal).clone();
-    c.position.set(LANES[l], 0, SPAWN_Z + k * 14);
-    c.userData = { lane: l, cop, v: cop ? 0.55 : 0.4 + Math.random() * 0.2, weave: cop ? 1 + Math.random() * 2 : 0 };
+    c.position.set(LANES[l], 0, SPAWN_Z + k * 9);
+    c.userData = { lane: l, cop, v: 0.45, weave: cop ? 1 + Math.random() * 2 : 0 };
     scene.add(c); traffic.push(c);
   }
   // coin trail in a free lane
-  const free = [0, 1, 2].filter(l => !used.has(l));
+  const free = [0, 1, 2].filter(l => !taken.has(l));
   const cl = free[Math.floor(Math.random() * free.length)];
   for (let i = 0; i < 5; i++) {
     const p = kit.Coin.clone(); p.position.set(LANES[cl], 0, SPAWN_Z + 10 + i * 5); scene.add(p); pickups.push(p);
@@ -210,11 +227,23 @@ function frame(dt, draw = true) {
       c.position.z -= v * dt - speed * u.v * dt;               // they drive too, just slower
       if (u.cop && c.position.z < 90 && c.position.z > 20) {   // cops swerve toward you
         u.weave -= dt;
-        if (u.weave <= 0) { u.lane += Math.sign(lane - u.lane); u.weave = 1.6 + Math.random(); }
+        if (u.weave <= 0) {
+          const to = u.lane + Math.sign(lane - u.lane), near = lanesNear(c.position.z, c);
+          if (to !== u.lane && !near.has(to) && new Set([...near, to]).size < 3) u.lane = to;   // only if a gap stays open
+          u.weave = 1.6 + Math.random();
+        }
       }
       c.position.x += (LANES[u.lane] - c.position.x) * Math.min(1, dt * 3);
-      if (Math.abs(c.position.x - laneX) < 2.0 && Math.abs(c.position.z) < 4.6) crash();
+      if (!GOD && Math.abs(c.position.x - laneX) < 2.0 && Math.abs(c.position.z) < 4.6) crash();
       if (c.position.z < -30) { scene.remove(c); traffic.splice(i, 1); score += 25; }
+    }
+    if (GOD) {   // wall detector: all 3 lanes covered inside one 16 m slice ahead
+      let wall = false;
+      for (const a of traffic) if (a.position.z > 0 && a.position.z < 140) {
+        const ls = new Set(traffic.filter(b => Math.abs(b.position.z - a.position.z) < 16).map(b => Math.round((4.65 - b.position.x) / 4.65)));
+        if (ls.size >= 3) wall = true;
+      }
+      if (wall && !wallFrames) walls++; wallFrames = wall ? wallFrames + 1 : 0;
     }
     for (let i = pickups.length - 1; i >= 0; i--) {
       const p = pickups[i];
@@ -257,4 +286,5 @@ const WARM = +new URLSearchParams(location.search).get('warm') || 0;   // fast-f
 for (let i = 0; i < WARM * 60; i++) frame(1 / 60, false);
 if (new URLSearchParams(location.search).has('cam')) camMode = +new URLSearchParams(location.search).get('cam');
 if (new URLSearchParams(location.search).has('bp')) setBlueprint(blueprint = true);
+if (GOD) console.log('WALLS', walls, 'in', WARM, 's, dist', Math.round(dist));
 renderer.setAnimationLoop(() => frame(Math.min(clock.getDelta(), 0.05)));
