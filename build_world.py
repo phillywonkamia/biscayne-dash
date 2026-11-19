@@ -45,6 +45,15 @@ NEONS  = [mat('NeonPink', (1.0, 0.1, 0.6), emit=10), mat('NeonCyan', (0.0, 0.9, 
           mat('NeonPurple', (0.6, 0.1, 1.0), emit=10), mat('NeonOrange', (1.0, 0.45, 0.0), emit=10)]
 WALLS  = [mat('Wall1', (0.08, 0.07, 0.12)), mat('Wall2', (0.12, 0.09, 0.1)), mat('Wall3', (0.06, 0.09, 0.1))]
 WINDOW = mat('Window', (1.0, 0.8, 0.5), emit=3)
+RIM    = mat('Rim',        (0.9, 0.9, 0.95),  metal=1.0, rough=0.1)       # own material so the garage can recolor rims
+GLASSW = mat('TowerGlass', (0.05, 0.12, 0.22), metal=0.8, rough=0.15)
+STRIP  = mat('TowerStrip', (0.85, 0.95, 1.0), emit=6)
+PASTEL = [mat('DecoMint', (0.45, 0.95, 0.8), emit=0.25), mat('DecoPeach', (1.0, 0.65, 0.5), emit=0.25),
+          mat('DecoLilac', (0.75, 0.6, 1.0), emit=0.25)]
+CONC   = mat('Concrete',   (0.35, 0.35, 0.4), rough=0.9)
+LAMP   = mat('LampGlow',   (1.0, 0.75, 0.4), emit=10)
+HELI   = mat('HeliBody',   (0.06, 0.06, 0.08), metal=0.6, rough=0.35)
+BEACON = mat('HeliBeacon', (1.0, 0.1, 0.1), emit=12)
 
 # ------------------------------------------------------------ helpers
 def box(name, size, loc, m, parent=None, bevel=0.0):
@@ -80,7 +89,7 @@ def car(name, body, top, x=0, lights=True, siren=False):
     for sx in (-1, 1):
         for sy in (-1, 1):
             cyl(name + '_Tire', 0.42, 0.32, (x + sx * 0.92, sy * 1.45, 0.42), TIRE, (0, math.pi / 2, 0), r)
-            cyl(name + '_Rim', 0.26, 0.34, (x + sx * 0.92, sy * 1.45, 0.42), CHROME, (0, math.pi / 2, 0), r)
+            cyl(name + '_Rim', 0.26, 0.34, (x + sx * 0.92, sy * 1.45, 0.42), RIM, (0, math.pi / 2, 0), r)
         if lights:
             box(name + '_Head', (0.4, 0.06, 0.16), (x + sx * 0.62, -2.31, 0.68), HEAD, r)
             box(name + '_Tail', (0.45, 0.06, 0.14), (x + sx * 0.6, 2.31, 0.68), TAIL, r)
@@ -121,8 +130,71 @@ palm('Palm', -9)
 for i, (w, d, h) in enumerate([(8, 14, 18), (9, 12, 30), (7, 16, 12)]):
     building('Building_%d' % i, -20 - i * 12, w, d, h, WALLS[i], NEONS[i])
 
+# coin = a ring, so you can see the traffic through it
 c = root('Coin', (0, -8, 0))
-o = cyl('Coin_Disc', 0.55, 0.12, (0, -8, 1.2), COIN, (math.pi / 2, 0, 0), c, verts=32)
+bpy.ops.mesh.primitive_torus_add(major_radius=0.55, minor_radius=0.08, major_segments=32, minor_segments=8,
+                                 location=(0, -8, 1.2), rotation=(math.pi / 2, 0, 0))
+o = bpy.context.object; o.name = 'Coin_Ring'; o.data.materials.append(COIN); o.parent = c
+
+# BRICKELL: glass towers with light strips
+def tower(name, x, w, d, h):
+    r = root(name, (x, 0, 0))
+    box(name + '_Glass', (w, d, h), (x, 0, h / 2), GLASSW, r)
+    for j in range(-2, 3):   # vertical light strips on the road face
+        box(name + '_Strip', (0.1, 0.18, h - 2), (x + w / 2 + 0.03, j * d / 5.5, h / 2), STRIP, r)
+    box(name + '_Crown', (w + 0.4, d + 0.4, 0.4), (x, 0, h + 0.2), STRIP, r)
+    for i in range(int(h // 6)):   # floor bands
+        box(name + '_Band', (w + 0.1, d + 0.1, 0.12), (x, 0, 3 + i * 6), CONC, r)
+    return r
+
+# OCEAN DRIVE: low pastel art deco with a neon eyebrow and a round corner
+def deco(name, x, w, d, h, wall, neon):
+    r = root(name, (x, 0, 0))
+    box(name + '_Wall', (w, d, h), (x, 0, h / 2), wall, r)
+    cyl(name + '_Corner', w / 2, h + 1.5, (x, -d / 2, (h + 1.5) / 2), wall, (0, 0, 0), r)
+    for k in range(3):
+        box(name + '_Eyebrow', (0.9, d, 0.15), (x + w / 2 + 0.4, 0, 3 + k * 3), CONC, r)
+    box(name + '_Neon', (0.15, d * 0.95, 0.25), (x + w / 2 + 0.1, 0, h - 0.4), neon, r)
+    box(name + '_Sign', (0.2, 0.5, 4), (x + w / 2 + 0.2, d / 2 - 1.5, h * 0.6), neon, r)
+    for j in range(int(d // 3)):
+        box(name + '_Win', (0.05, 1.4, 1.1), (x + w / 2 + 0.02, -d / 2 + 1.8 + j * 3, 4.2), WINDOW, r)
+    return r
+
+# CAUSEWAY: street lamp + concrete rail with marker lights
+def lamp(name, x):
+    r = root(name, (x, 0, 0))
+    cyl(name + '_Pole', 0.12, 9, (x, 0, 4.5), CONC, (0, 0, 0), r, verts=8)
+    box(name + '_Arm', (2.4, 0.15, 0.15), (x - 1.2, 0, 9), CONC, r)
+    box(name + '_Head', (0.9, 0.4, 0.2), (x - 2.3, 0, 8.9), LAMP, r)
+    return r
+def rail(name, x):
+    r = root(name, (x, 0, 0))
+    box(name + '_Wall', (0.5, 40, 1.1), (x, 0, 0.55), CONC, r)
+    for k in range(8):
+        box(name + '_Dot', (0.1, 0.3, 0.15), (x - 0.27, -17.5 + k * 5, 0.8), LAMP, r)
+    return r
+
+# the chase helicopter (rotor on its own hub so the game can spin it)
+def heli(name):
+    r = root(name, (0, 0, 0))
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=(0, 0, 0), segments=16, ring_count=8)
+    b = bpy.context.object; b.name = name + '_Body'; b.scale = (1.1, 2.0, 1.0)
+    bpy.ops.object.transform_apply(scale=True); b.data.materials.append(HELI); b.parent = r
+    box(name + '_Tail', (0.25, 3.6, 0.3), (0, 3.2, 0.3), HELI, r)
+    box(name + '_Fin', (0.12, 0.6, 1.0), (0, 4.9, 0.8), HELI, r)
+    for sx in (-1, 1):
+        box(name + '_Skid', (0.1, 2.6, 0.1), (sx * 0.8, 0, -1.1), CONC, r)
+    box(name + '_Beacon', (0.2, 0.2, 0.15), (0, 0.5, 1.05), BEACON, r)
+    hub = bpy.data.objects.new(name + '_Rotor', None); sc.collection.objects.link(hub); hub.parent = r; hub.location = (0, 0, 1.2)
+    for k in range(2):
+        bl = box(name + '_Blade', (0.25, 7.5, 0.05), (0, 0, 0), HELI)
+        bl.parent = hub; bl.location = (0, 0, 0); bl.rotation_euler = (0, 0, k * math.pi / 2)
+    return r
+
+tower('Tower_0', -60, 10, 14, 52); tower('Tower_1', -75, 9, 12, 38)
+deco('Deco_0', -90, 9, 14, 10, PASTEL[0], NEONS[0]); deco('Deco_1', -105, 8, 12, 12, PASTEL[1], NEONS[1])
+deco('Deco_2', -120, 10, 16, 9, PASTEL[2], NEONS[2])
+lamp('Lamp', -130); rail('Rail', -135); heli('Heli')
 
 # one road tile (40 m), the game repeats it forever
 t = root('RoadTile', (0, 20, 0))
@@ -154,9 +226,15 @@ bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'world.glb'), export_format
 # ------------------------------------------------------------ Blender's own beauty shot of the "toybox"
 lay = {'Player': (0, 0), 'Traffic_Teal': (-3.2, 7), 'Traffic_Cop': (3.2, 12), 'Palm': (-9, 4),
        'Building_0': (-14, 10), 'Building_1': (15, 22), 'Building_2': (-14, 26), 'Coin': (0, -6), 'RoadTile': (0, -8)}
+for o in bpy.data.objects:
+    if o.parent is None and o.type == 'EMPTY' and o.name not in lay:
+        for ch in o.children_recursive: ch.hide_render = True
+lay.update({'Tower_0': (17, 34), 'Deco_0': (-15, 30), 'Heli': (-2, 20)})
 for n, (x, y) in lay.items():
     o = bpy.data.objects[n]; o.location = (x, y, 0)
-    if n.startswith('Building_1'): o.rotation_euler = (0, 0, math.pi)
+    if n.startswith('Building_1') or n.startswith('Tower'): o.rotation_euler = (0, 0, math.pi)
+    if n == 'Heli': o.location.z = 9
+    for ch in o.children_recursive: ch.hide_render = False
 w = bpy.data.worlds.new('night'); sc.world = w; w.use_nodes = True
 w.node_tree.nodes['Background'].inputs['Color'].default_value = (0.01, 0.005, 0.03, 1)
 cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam')); sc.collection.objects.link(cam); sc.camera = cam
