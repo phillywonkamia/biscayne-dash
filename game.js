@@ -225,17 +225,78 @@ const Career = {
     localStorage.setItem('bdash-career', JSON.stringify(c)); return c;
   },
 };
+// ---------------------------------------------------------------- world scoreboard (Supabase)
+// Every phone posts named runs here and reads one shared Top 10. Offline runs wait in an outbox.
+// The key below is a PUBLIC key by design: the database only allows reading and adding scores.
+const SB = 'https://ctgwavompqcfiyntnusw.supabase.co/rest/v1/scores';
+const SB_KEY = 'sb_publishable_aVG0C2xhekk-aNrQQ9M68g_1dKBjASq';
+const DEVICE = Q.has('testdevice') ? 'claude-test' : localStorage.getItem('bdash-device') || (() => {
+  const id = 'd-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  localStorage.setItem('bdash-device', id); return id;
+})();
+const World = {
+  top: [], ok: false,
+  async refresh() {
+    try {
+      const r = await fetch(`${SB}?select=name,score,device&device=neq.claude-test&order=score.desc&limit=10`, { headers: { apikey: SB_KEY } });
+      if (!r.ok) throw new Error(r.status);
+      this.top = await r.json(); this.ok = true;
+    } catch { this.ok = false; }
+    return this.top;
+  },
+  qualifies(pts) { return this.ok && pts > 0 && (this.top.length < 10 || pts > this.top[this.top.length - 1].score); },
+  rank(pts) { return this.top.filter(r => r.score >= pts).length + 1; },
+  queue(run) {
+    const ob = JSON.parse(localStorage.getItem('bdash-outbox') || '[]');
+    ob.push({
+      name: String(run.name).toUpperCase().slice(0, 10) || 'DRIVER', score: Math.min(1999999, Math.floor(run.score)),
+      coins: Math.min(19999, run.coins | 0), miles: Math.min(499, +run.miles || 0), device: DEVICE,
+    });
+    localStorage.setItem('bdash-outbox', JSON.stringify(ob));
+  },
+  async flush() {   // one row per request so a single bad row can't block the rest
+    const ob = JSON.parse(localStorage.getItem('bdash-outbox') || '[]'), left = [];
+    for (const row of ob) {
+      try {
+        const r = await fetch(`${SB}?on_conflict=device,score,name`, {
+          method: 'POST', body: JSON.stringify(row),
+          headers: { apikey: SB_KEY, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        });
+        if (!r.ok && r.status !== 400) left.push(row);   // 400 = rejected by the rules, drop it
+      } catch { left.push(row); }
+    }
+    localStorage.setItem('bdash-outbox', JSON.stringify(left));
+  },
+};
+// first run of this version: send this phone's existing Top 10 up so nobody loses their scores
+if (!localStorage.getItem('bdash-synced')) {
+  for (const r of JSON.parse(localStorage.getItem('bdash-board') || '[]')) World.queue(r);
+  localStorage.setItem('bdash-synced', '1');
+}
+async function syncWorld() { await World.flush(); await World.refresh(); if (state === 'title') showTitleBoard(); }
+addEventListener('online', syncWorld);
+
 const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 function renderBoard(el, rows, hi = -1, head = 'TOP 10') {
   if (!rows.length) { el.innerHTML = `<div class="bhead">${head}</div><div class="bempty">No scores yet. Be the first.</div>`; return; }
   el.innerHTML = `<div class="bhead">${head}</div>` + rows.map((r, i) =>
-    `<div class="brow${i === hi ? ' me' : ''}"><span class="bn">${i + 1}</span><span class="bname">${esc(r.name)}</span><span class="bpts">${r.score.toLocaleString()}</span></div>`).join('');
+    `<div class="brow${i === hi || (hi === -2 && r.device === DEVICE) ? ' me' : ''}"><span class="bn">${i + 1}</span><span class="bname">${esc(r.name)}</span><span class="bpts">${r.score.toLocaleString()}</span></div>`).join('');
 }
 function renderCareer() {
   const c = Career.load();
   $('career').innerHTML = c.runs ? `CAREER &nbsp;·&nbsp; ${c.runs} RUNS &nbsp;·&nbsp; ${c.coins.toLocaleString()} COINS &nbsp;·&nbsp; ${c.miles.toFixed(1)} MI &nbsp;·&nbsp; ${(c.closeCalls || 0)} CLOSE CALLS &nbsp;·&nbsp; LONGEST ${c.bestMiles.toFixed(2)} MI` : '';
 }
-function showTitleBoard() { renderBoard($('boardTitle'), Board.load().slice(0, 5), -1, 'TOP 5'); renderCareer(); }
+function showTitleBoard() {
+  if (World.ok) renderBoard($('boardTitle'), World.top, -2, 'WORLD TOP 10');
+  else renderBoard($('boardTitle'), Board.load().slice(0, 5), -1, 'TOP 5 · THIS PHONE');
+  const mine = (Board.load()[0] || {}).score;
+  $('mybest').textContent = mine ? `YOUR BEST ${mine.toLocaleString()}` : '';
+  renderCareer();
+}
+function showOverBoard() {
+  if (World.ok) renderBoard($('boardOver'), World.top, -2, 'WORLD TOP 10');
+  else renderBoard($('boardOver'), Board.load(), -1, 'TOP 10 · THIS PHONE (OFFLINE)');
+}
 
 let pendingRun = null;   // a run waiting for its name
 function saveName() {
@@ -243,9 +304,11 @@ function saveName() {
   const name = ($('name').value.trim().toUpperCase() || 'DRIVER').slice(0, 10);
   localStorage.setItem('bdash-name', name);
   pendingRun.name = name;
-  const at = Board.add(pendingRun); pendingRun = null;
+  if (Board.qualifies(pendingRun.score)) Board.add(pendingRun);
+  World.queue(pendingRun); pendingRun = null;
   $('name').blur(); $('entry').classList.add('hidden'); $('again').classList.remove('hidden');
-  renderBoard($('boardOver'), Board.load(), at);
+  showOverBoard();
+  syncWorld().then(showOverBoard);
 }
 $('save').addEventListener('click', saveName);
 $('name').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') saveName(); });
@@ -263,11 +326,12 @@ const GOD = Q.has('god');            // testing: no crashes
 const START_DIST = +Q.get('dist') || 0;   // testing: start further down the route
 let walls = 0, wallFrames = 0;
 showTitleBoard();
+syncWorld();
 for (const tl of tiles) dress(tl);
 
 function reset() {
   Sound.start(); Sound.setPlaying(true);
-  best = Math.max(best, (Board.load()[0] || {}).score || 0);
+  best = Math.max(best, (Board.load()[0] || {}).score || 0, (World.top[0] || {}).score || 0);
   for (const o of [...traffic, ...pickups]) scene.remove(o);
   traffic.length = pickups.length = 0;
   speed = 28; dist = START_DIST; score = coins = 0; nitro = 0.3; lane = 1; laneX = 0; spawnIn = 1;
@@ -334,16 +398,16 @@ function crash() {
   $('final').innerHTML = `${pts.toLocaleString()} PTS &nbsp;·&nbsp; ${coins} COINS &nbsp;·&nbsp; ${miles.toFixed(2)} MI<div class="sub">${closeCalls} CLOSE CALLS &nbsp;·&nbsp; MADE IT TO ${reached}</div>`;
   Career.record({ coins, miles, closeCalls, byCop: !!lastHit?.userData.cop });
   $('busted').textContent = lastHit?.userData.cop ? 'BUSTED' : 'WRECKED';
-  if (Board.qualifies(pts)) {
+  if (Board.qualifies(pts) || World.qualifies(pts)) {
     pendingRun = { score: pts, coins, miles: +miles.toFixed(2), date: new Date().toISOString().slice(0, 10) };
-    const rank = Board.load().filter(r => r.score >= pts).length + 1;
-    $('rank').textContent = rank === 1 ? 'NEW #1 HIGH SCORE' : `NEW HIGH SCORE · #${rank}`;
+    const onWorld = World.qualifies(pts), rank = onWorld ? World.rank(pts) : Board.load().filter(r => r.score >= pts).length + 1;
+    $('rank').textContent = onWorld ? (rank === 1 ? 'NEW WORLD #1' : `WORLD TOP 10 · #${rank}`) : (rank === 1 ? 'NEW PERSONAL BEST' : `NEW HIGH SCORE · #${rank} ON THIS PHONE`);
     $('name').value = localStorage.getItem('bdash-name') || '';
     $('entry').classList.remove('hidden'); $('again').classList.add('hidden');
   } else {
     $('entry').classList.add('hidden'); $('again').classList.remove('hidden');
   }
-  renderBoard($('boardOver'), Board.load());
+  showOverBoard();
   setTimeout(() => {
     $('over').classList.remove('hidden'); if (pendingRun && !TOUCH) $('name').focus();
     const tn = Q.get('tname');   // testing: auto-enter a name
